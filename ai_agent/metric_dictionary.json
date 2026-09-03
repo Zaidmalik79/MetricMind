@@ -1,0 +1,24 @@
+{
+    "revenue": [
+        "sales",
+        "income",
+        "turnover"
+    ],
+
+    "profit": [
+        "earnings",
+        "net income",
+        "gain"
+    ],
+
+    "customer": [
+        "client",
+        "buyer",
+        "consumer"
+    ],
+
+    "inventory": [
+        "stock",
+        "products"
+    ]
+}
