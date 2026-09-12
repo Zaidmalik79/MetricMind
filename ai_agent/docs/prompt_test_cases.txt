@@ -1,0 +1,20 @@
+1. Show revenue
+2. Show profit
+3. Sales by region
+4. Monthly revenue
+5. Revenue trend
+6. Profit trend
+7. Orders by month
+8. Top customers
+9. Bottom customers
+10. Customer growth
+11. Inventory status
+12. Top selling products
+13. Lowest profit category
+14. Revenue by product
+15. Average order value
+16. Monthly sales
+17. Yearly profit
+18. Region performance
+19. Product returns
+20. Revenue comparison
