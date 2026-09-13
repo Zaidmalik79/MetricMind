@@ -1,0 +1,1 @@
+from backend.config.config import DATABASE_URL
