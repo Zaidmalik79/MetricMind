@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrendingUp, TrendingDown, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function KpiCard({
   title,
@@ -11,133 +11,182 @@ export default function KpiCard({
   isSelected = false,
   onClick,
   target,
-  progress = 85
+  progress = 100,
+  showSparkline = true
 }) {
-  const colorGradients = {
-    indigo: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(99, 102, 241, 0.05) 100%)',
-    cyan: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.05) 100%)',
-    emerald: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%)',
-    purple: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.05) 100%)'
+  const colorThemes = {
+    indigo: {
+      bg: 'rgba(99, 102, 241, 0.12)',
+      border: 'rgba(99, 102, 241, 0.4)',
+      activeBorder: '#3b82f6',
+      iconBg: '#2563eb',
+      iconColor: '#ffffff',
+      sparklineColor: '#3b82f6',
+      barGrad: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+      glow: 'rgba(59, 130, 246, 0.25)'
+    },
+    emerald: {
+      bg: 'rgba(16, 185, 129, 0.08)',
+      border: 'rgba(16, 185, 129, 0.3)',
+      activeBorder: '#10b981',
+      iconBg: '#059669',
+      iconColor: '#ffffff',
+      sparklineColor: '#10b981',
+      barGrad: 'linear-gradient(90deg, #10b981, #34d399)',
+      glow: 'rgba(16, 185, 129, 0.25)'
+    },
+    cyan: {
+      bg: 'rgba(6, 182, 212, 0.08)',
+      border: 'rgba(6, 182, 212, 0.3)',
+      activeBorder: '#06b6d4',
+      iconBg: '#0891b2',
+      iconColor: '#ffffff',
+      sparklineColor: '#06b6d4',
+      barGrad: 'linear-gradient(90deg, #06b6d4, #38bdf8)',
+      glow: 'rgba(6, 182, 212, 0.25)'
+    },
+    purple: {
+      bg: 'rgba(168, 85, 247, 0.08)',
+      border: 'rgba(168, 85, 247, 0.3)',
+      activeBorder: '#a855f7',
+      iconBg: '#7c3aed',
+      iconColor: '#ffffff',
+      sparklineColor: '#a855f7',
+      barGrad: 'linear-gradient(90deg, #a855f7, #c084fc)',
+      glow: 'rgba(168, 85, 247, 0.25)'
+    }
   };
 
-  const borderColors = {
-    indigo: '#6366f1',
-    cyan: '#06b6d4',
-    emerald: '#10b981',
-    purple: '#8b5cf6'
-  };
-
-  const iconColors = {
-    indigo: '#818cf8',
-    cyan: '#38bdf8',
-    emerald: '#34d399',
-    purple: '#c084fc'
-  };
+  const theme = colorThemes[color] || colorThemes.indigo;
 
   return (
     <div
       onClick={onClick}
       className="glass-panel glass-card-interactive"
       style={{
-        padding: '1.25rem',
+        padding: '1.2rem 1.35rem',
         cursor: onClick ? 'pointer' : 'default',
         position: 'relative',
-        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        border: isSelected
-          ? `2px solid ${borderColors[color] || '#6366f1'}`
-          : '1px solid var(--border-color)',
-        boxShadow: isSelected
-          ? `0 0 20px -3px ${borderColors[color]}44, 0 8px 24px 0 rgba(0,0,0,0.4)`
-          : undefined,
-        transform: isSelected ? 'translateY(-2px)' : undefined
+        background: isSelected ? 'rgba(18, 24, 48, 0.9)' : 'rgba(12, 16, 32, 0.75)',
+        border: isSelected ? `1.5px solid ${theme.activeBorder}` : '1px solid rgba(255, 255, 255, 0.08)',
+        boxShadow: isSelected ? `0 0 25px -4px ${theme.glow}, 0 10px 30px rgba(0,0,0,0.5)` : '0 8px 25px rgba(0,0,0,0.3)',
+        borderRadius: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        minHeight: '160px'
       }}
     >
-      {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span style={{ fontSize: '0.85rem', color: isSelected ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: 600 }}>
+      {/* Top Header Row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: theme.iconBg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: `0 2px 10px ${theme.glow}`
+          }}>
+            {Icon && <Icon style={{ width: '16px', height: '16px', color: '#ffffff' }} />}
+          </div>
+          <span style={{ fontSize: '0.88rem', color: '#cbd5e1', fontWeight: 600 }}>
             {title}
           </span>
           {isSelected && (
             <span style={{
-              fontSize: '0.65rem',
+              fontSize: '0.62rem',
               padding: '0.15rem 0.45rem',
               borderRadius: '999px',
-              background: `${borderColors[color]}22`,
-              color: borderColors[color],
+              background: 'rgba(99, 102, 241, 0.3)',
+              color: '#a5b4fc',
               fontWeight: 700,
-              textTransform: 'uppercase'
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em'
             }}>
-              Active
+              ACTIVE
             </span>
           )}
         </div>
 
-        <div style={{
-          width: '36px',
-          height: '36px',
-          borderRadius: '10px',
-          background: colorGradients[color] || colorGradients.indigo,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: isSelected ? `0 0 10px ${borderColors[color]}33` : 'none'
-        }}>
-          {Icon && <Icon style={{ width: '20px', height: '20px', color: iconColors[color] }} />}
-        </div>
-      </div>
-
-      {/* Main Metric Value */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
-        <h2 style={{ fontSize: '1.65rem', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>
-          {value}
-        </h2>
-        {change && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.2rem',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            color: isPositive ? 'var(--accent-emerald)' : 'var(--accent-rose)'
-          }}>
-            {isPositive ? <TrendingUp style={{ width: '14px', height: '14px' }} /> : <TrendingDown style={{ width: '14px', height: '14px' }} />}
-            {change}
-          </div>
+        {/* Mini Wave Graphic Sparkline */}
+        {showSparkline && (
+          <svg width="60" height="24" viewBox="0 0 60 24" fill="none" style={{ opacity: 0.85 }}>
+            <path
+              d={
+                color === 'indigo'
+                  ? 'M2 18 C 15 12, 30 22, 45 6 C 52 2, 56 8, 58 4'
+                  : color === 'emerald'
+                  ? 'M2 20 C 15 16, 28 8, 42 12 C 50 4, 55 6, 58 3'
+                  : color === 'cyan'
+                  ? 'M2 19 C 18 19, 32 14, 44 8 C 50 4, 55 5, 58 2'
+                  : 'M2 20 C 14 18, 25 10, 38 12 C 48 5, 54 8, 58 3'
+              }
+              stroke={theme.sparklineColor}
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
+            <path
+              d={
+                color === 'indigo'
+                  ? 'M2 18 C 15 12, 30 22, 45 6 C 52 2, 56 8, 58 4 L 58 24 L 2 24 Z'
+                  : color === 'emerald'
+                  ? 'M2 20 C 15 16, 28 8, 42 12 C 50 4, 55 6, 58 3 L 58 24 L 2 24 Z'
+                  : color === 'cyan'
+                  ? 'M2 19 C 18 19, 32 14, 44 8 C 50 4, 55 5, 58 2 L 58 24 L 2 24 Z'
+                  : 'M2 20 C 14 18, 25 10, 38 12 C 48 5, 54 8, 58 3 L 58 24 L 2 24 Z'
+              }
+              fill={theme.sparklineColor}
+              fillOpacity="0.15"
+            />
+          </svg>
         )}
       </div>
 
-      {/* Target Progress Bar */}
-      {target && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-            <span>Target: {target}</span>
-            <span>{Math.min(progress, 100)}%</span>
-          </div>
-          <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden' }}>
+      {/* Main Metric Value */}
+      <div style={{ margin: '0.4rem 0 0.6rem 0' }}>
+        <h2 style={{ fontSize: '1.75rem', color: '#ffffff', margin: 0, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+          {value}
+        </h2>
+      </div>
+
+      {/* Target & Change Row */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.45rem' }}>
+          <span style={{ color: 'var(--text-muted)' }}>
+            Target: {target || '$6.0B'}
+          </span>
+          {change && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.2rem',
+              fontWeight: 600,
+              color: isPositive ? '#34d399' : '#fb7185'
+            }}>
+              <span>↑</span>
+              <span>{change}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Progress Bar with 100% badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div style={{ flex: 1, height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
             <div style={{
               width: `${Math.min(progress, 100)}%`,
               height: '100%',
-              background: `linear-gradient(90deg, ${borderColors[color]}, ${iconColors[color]})`,
+              background: theme.barGrad,
               borderRadius: '2px'
             }} />
           </div>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+            {progress}%
+          </span>
         </div>
-      )}
-
-      {/* Interactive Click Hint */}
-      {onClick && (
-        <div style={{
-          position: 'absolute',
-          bottom: '4px',
-          right: '8px',
-          fontSize: '0.65rem',
-          color: 'rgba(255,255,255,0.25)',
-          pointerEvents: 'none'
-        }}>
-          {isSelected ? '● Visualizing' : 'Click to view'}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
