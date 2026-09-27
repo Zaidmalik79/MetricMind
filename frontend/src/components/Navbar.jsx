@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, MessageSquareText, Database, ExternalLink, Sparkles, Activity } from 'lucide-react';
+import { LayoutDashboard, MessageSquareText, Database, ExternalLink, Sparkles, Activity, SearchCheck } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab }) {
   return (
@@ -87,6 +87,26 @@ export default function Navbar({ activeTab, setActiveTab }) {
         >
           <MessageSquareText style={{ width: '16px', height: '16px' }} />
           AI BI Chat
+        </button>
+
+        <button
+          onClick={() => setActiveTab('rootcause')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.5rem 1rem',
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'rootcause' ? 'var(--accent-indigo)' : 'transparent',
+            color: activeTab === 'rootcause' ? '#ffffff' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'rootcause' ? 600 : 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <SearchCheck style={{ width: '16px', height: '16px' }} />
+          Root-Cause RCA
         </button>
 
         <button
