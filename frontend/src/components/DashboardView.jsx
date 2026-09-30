@@ -1,27 +1,28 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import KpiCard from './KpiCard';
 import {
-  DollarSign, ShoppingBag, Users, CreditCard, Sparkles, Filter, RefreshCw,
+  DollarSign, ShoppingCart, ShoppingBag, CreditCard, Sparkles, Filter, RefreshCw,
   TrendingUp, TrendingDown, Download, BarChart3, LineChart as LineIcon,
-  PieChart as PieIcon, Layers, Search, ArrowUpDown, ChevronDown, Check,
-  X, HelpCircle, ArrowRight, Zap, Eye, Calendar, MapPin, Tag, Activity
+  Layers, Search, ArrowUpDown, ChevronDown, Check, X, ArrowRight, Zap,
+  Calendar, Globe, Building2, Tag, Activity, RotateCcw, Percent, BarChart2
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart, Pie, Cell, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
-  Legend
+  LabelList
 } from 'recharts';
 
 export default function DashboardView({ onNavigateToChat, onNavigateToRootCause }) {
   // Filter States
   const [regionFilter, setRegionFilter] = useState('All');
+  const [headquartersFilter, setHeadquartersFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [timeframeFilter, setTimeframeFilter] = useState('All Time');
   
   // Interactive View States
   const [activeMetric, setActiveMetric] = useState('revenue'); // 'revenue' | 'profit' | 'orders' | 'margin'
-  const [chartType, setChartType] = useState('area'); // 'area' | 'bar' | 'line' | 'dual'
-  const [showTarget, setShowTarget] = useState(true);
+  const [chartType, setChartType] = useState('area'); // 'area' | 'bar' | 'line'
+  const [targetMode, setTargetMode] = useState('Revenue vs Target');
   
   // Data States
   const [dashboardData, setDashboardData] = useState(null);
@@ -37,14 +38,11 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState('revenue');
   const [sortAsc, setSortAsc] = useState(false);
-  const [rowsPerPage, setRowsPerPage] = useState(6);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
 
-  // Auto-refresh timer state
+  // Auto-refresh state
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [countdown, setCountdown] = useState(30);
-
-  // Drilldown modal for specific month
-  const [drilldownMonth, setDrilldownMonth] = useState(null);
 
   // Fetch filter options on mount
   useEffect(() => {
@@ -61,7 +59,7 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
           }));
         }
       } catch (e) {
-        console.warn('Could not load filters from server, using presets:', e);
+        console.warn('Could not load filters from server, using defaults:', e);
       }
     }
     loadFilterOptions();
@@ -134,29 +132,18 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
 
   const handleResetFilters = () => {
     setRegionFilter('All');
+    setHeadquartersFilter('All');
     setCategoryFilter('All');
     setTimeframeFilter('All Time');
   };
 
-  const hasActiveFilters = regionFilter !== 'All' || categoryFilter !== 'All' || timeframeFilter !== 'All Time';
-
-  // Export Data as JSON
-  const handleExportJSON = () => {
-    if (!dashboardData) return;
-    const blob = new Blob([JSON.stringify(dashboardData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `metricmind-dashboard-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const hasActiveFilters = regionFilter !== 'All' || categoryFilter !== 'All' || timeframeFilter !== 'All Time' || headquartersFilter !== 'All';
 
   // Export Top Products as CSV
   const handleExportCSV = () => {
     const prods = dashboardData?.top_products || [];
     if (!prods.length) return;
-    const headers = ['Product ID', 'Product Name', 'Category', 'Revenue ($)', 'Profit ($)', 'Units Sold', 'Margin (%)'];
+    const headers = ['ID', 'Product Name', 'Category', 'Revenue ($)', 'Profit ($)', 'Units', 'Margin (%)'];
     const rows = prods.map(p => [
       p.id, `"${p.name}"`, `"${p.category}"`, p.revenue, p.profit, p.units_sold, p.margin
     ]);
@@ -170,19 +157,44 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
     document.body.removeChild(link);
   };
 
-  // Color Palette
-  const PIE_COLORS = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6'];
+  // Modern Color Palette matching reference mockup
+  const PIE_COLORS = [
+    '#3b82f6', // Electronics (Blue)
+    '#facc15', // Clothing (Yellow)
+    '#ec4899', // Home & Kitchen (Pink)
+    '#f43f5e', // Books (Red)
+    '#10b981', // Beauty (Green)
+    '#06b6d4', // Sports (Cyan)
+    '#f97316', // Toys (Orange)
+    '#94a3b8'  // Others (Gray)
+  ];
+
+  // Default Categories with percentage shares if live list exists
+  const categoryPercentages = useMemo(() => {
+    const cats = dashboardData?.categories || [];
+    const totalVal = cats.reduce((acc, curr) => acc + curr.value, 0) || 1;
+    return cats.map((c, idx) => ({
+      ...c,
+      color: PIE_COLORS[idx % PIE_COLORS.length],
+      percentage: ((c.value / totalVal) * 100).toFixed(1)
+    }));
+  }, [dashboardData]);
+
+  // Regional ranking data formatted for horizontal bar chart
+  const regionalData = useMemo(() => {
+    const raw = dashboardData?.regions || [];
+    // Sort descending by revenue and take top 8
+    return [...raw].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+  }, [dashboardData]);
 
   // Metric Labels & Formatter
   const getMetricConfig = () => {
     switch (activeMetric) {
       case 'profit':
         return {
-          label: 'Net Profit',
+          label: 'Gross Profit',
           dataKey: 'profit',
           color: '#10b981',
-          gradientId: 'colorProfit',
-          unit: '$',
           format: (val) => `$${Number(val).toLocaleString()}`
         };
       case 'orders':
@@ -190,17 +202,13 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
           label: 'Total Orders',
           dataKey: 'orders',
           color: '#06b6d4',
-          gradientId: 'colorOrders',
-          unit: '',
           format: (val) => Number(val).toLocaleString()
         };
       case 'margin':
         return {
           label: 'Profit Margin %',
           dataKey: 'margin',
-          color: '#c084fc',
-          gradientId: 'colorMargin',
-          unit: '%',
+          color: '#a855f7',
           format: (val) => `${Number(val).toFixed(1)}%`
         };
       case 'revenue':
@@ -208,9 +216,7 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
         return {
           label: 'Total Revenue',
           dataKey: 'revenue',
-          color: '#6366f1',
-          gradientId: 'colorRevenue',
-          unit: '$',
+          color: '#3b82f6',
           format: (val) => `$${Number(val).toLocaleString()}`
         };
     }
@@ -218,50 +224,26 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
 
   const metricConfig = getMetricConfig();
 
-  // Custom Recharts Floating Tooltip
-  const CustomTooltip = ({ active, payload, label }) => {
+  // Custom Floating Tooltip for Area/Line Chart matching mockup
+  const CustomChartTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
         <div style={{
-          background: 'rgba(15, 20, 34, 0.95)',
+          background: 'rgba(15, 20, 36, 0.95)',
           backdropFilter: 'blur(12px)',
           border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: '12px',
-          padding: '0.85rem 1rem',
-          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6)',
-          minWidth: '180px'
+          borderRadius: '10px',
+          padding: '0.65rem 0.95rem',
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6)',
+          minWidth: '150px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.35rem' }}>
-            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc' }}>{data.month || label}</span>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>2025</span>
+          <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
+            {data.month} 2024
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.82rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a5b4fc' }}>
-              <span>Revenue:</span>
-              <span style={{ fontWeight: 600 }}>${Number(data.revenue || 0).toLocaleString()}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6ee7b7' }}>
-              <span>Profit:</span>
-              <span style={{ fontWeight: 600 }}>${Number(data.profit || 0).toLocaleString()}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7dd3fc' }}>
-              <span>Orders:</span>
-              <span style={{ fontWeight: 600 }}>{Number(data.orders || 0).toLocaleString()}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e9d5ff' }}>
-              <span>Margin:</span>
-              <span style={{ fontWeight: 600 }}>{Number(data.margin || 0).toFixed(1)}%</span>
-            </div>
-            {data.target && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '0.25rem' }}>
-                <span>Target:</span>
-                <span>${Number(data.target).toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-          <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: '#6366f1', textAlign: 'center', cursor: 'pointer' }}>
-            Click point to inspect month ↗
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: '#ffffff', fontWeight: 700 }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: metricConfig.color }} />
+            <span>{metricConfig.label}: {metricConfig.format(data[metricConfig.dataKey])}</span>
           </div>
         </div>
       );
@@ -272,51 +254,47 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
   const kpis = dashboardData?.kpis;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
       
       {/* ================= 1. HEADER & INTERACTIVE CONTROL BAR ================= */}
       <div className="glass-panel" style={{
-        padding: '1.5rem 1.75rem',
+        padding: '1.4rem 1.6rem',
         display: 'flex',
         flexDirection: 'column',
         gap: '1.25rem',
-        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%)',
-        borderColor: 'rgba(99, 102, 241, 0.25)'
+        background: 'linear-gradient(135deg, rgba(20, 26, 54, 0.85) 0%, rgba(15, 20, 42, 0.75) 100%)',
+        borderColor: 'rgba(255, 255, 255, 0.09)'
       }}>
         {/* Top Header Row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
-              <span className="pill-badge">Interactive BI Executive Suite</span>
-              {autoRefresh && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: '#34d399', background: 'rgba(16, 185, 129, 0.15)', padding: '0.2rem 0.5rem', borderRadius: '999px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                  <span className="pulse-dot" /> Live ({countdown}s)
-                </span>
-              )}
+            <div style={{ marginBottom: '0.4rem' }}>
+              <span className="pill-badge" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#c7d2fe', borderColor: 'rgba(99, 102, 241, 0.4)' }}>
+                INTERACTIVE BI EXECUTIVE SUITE
+              </span>
             </div>
-            <h2 style={{ fontSize: '1.75rem', color: 'var(--text-primary)', margin: 0 }}>
-              Enterprise Performance <span className="gradient-text">Intelligence</span>
+            <h2 style={{ fontSize: '1.85rem', color: '#ffffff', margin: 0, fontWeight: 800, letterSpacing: '-0.02em' }}>
+              Enterprise Performance <span className="gradient-text-purple">Intelligence</span>
             </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginTop: '0.25rem' }}>
-              Direct interactive slice-and-dice across 4.45M transactions, 8 regions, and 15 product categories.
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.3rem' }}>
+              Direct interactive slice-and-dice across 4.6M transactions, 8 regions, and 13 product categories.
             </p>
           </div>
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            {/* Auto-Refresh Toggle */}
+            {/* Auto-Refresh */}
             <button
               onClick={() => setAutoRefresh(!autoRefresh)}
               className="btn-secondary"
               style={{
-                fontSize: '0.82rem',
                 borderColor: autoRefresh ? 'var(--accent-emerald)' : undefined,
                 color: autoRefresh ? '#34d399' : undefined
               }}
               title="Toggle automatic 30s background sync"
             >
-              <Activity style={{ width: '15px', height: '15px' }} />
-              {autoRefresh ? `Auto: On (${countdown}s)` : 'Auto: Off'}
+              <Zap style={{ width: '14px', height: '14px' }} />
+              {autoRefresh ? `Auto: On (${countdown}s)` : 'Auto Off'}
             </button>
 
             {/* Manual Refresh */}
@@ -324,30 +302,28 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
               onClick={fetchDashboardData}
               className="btn-secondary"
               disabled={loading}
-              style={{ fontSize: '0.82rem' }}
               title="Refresh dataset from PostgreSQL"
             >
-              <RefreshCw style={{ width: '15px', height: '15px', animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+              <RefreshCw style={{ width: '14px', height: '14px', animation: loading ? 'spin 1s linear infinite' : 'none' }} />
               Refresh
             </button>
 
-            {/* Export Menu */}
+            {/* Export CSV */}
             <button
               onClick={handleExportCSV}
               className="btn-secondary"
-              style={{ fontSize: '0.82rem' }}
               title="Download Top Products CSV"
             >
-              <Download style={{ width: '15px', height: '15px' }} />
+              <Download style={{ width: '14px', height: '14px' }} />
               Export CSV
             </button>
 
             {/* Ask AI Copilot */}
             {onNavigateToChat && (
               <button
-                onClick={() => onNavigateToChat(`Summarize enterprise business metrics for ${regionFilter} in ${categoryFilter} during ${timeframeFilter}.`)}
+                onClick={() => onNavigateToChat(`Summarize enterprise business performance for ${regionFilter} in ${categoryFilter} during ${timeframeFilter}.`)}
                 className="btn-primary"
-                style={{ fontSize: '0.82rem', padding: '0.55rem 1rem' }}
+                style={{ padding: '0.55rem 1.15rem' }}
               >
                 <Sparkles style={{ width: '15px', height: '15px' }} />
                 Ask AI Copilot
@@ -367,19 +343,38 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
           borderTop: '1px solid rgba(255, 255, 255, 0.08)'
         }}>
           {/* Left: Dropdown selectors & Time presets */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              <Filter style={{ width: '14px', height: '14px' }} /> FILTERS:
+              <Filter style={{ width: '14px', height: '14px' }} /> Filters:
             </span>
 
-            {/* Timeframe Presets */}
-            <div style={{ display: 'inline-flex', background: 'rgba(15, 20, 34, 0.8)', padding: '0.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-              {filterOptions.timeframes.map(tf => (
+            {/* Timeframe Presets Dropdown / Buttons */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <select
+                value={timeframeFilter}
+                onChange={(e) => setTimeframeFilter(e.target.value)}
+                className="custom-select"
+                style={{ paddingLeft: '2rem' }}
+              >
+                <option value="All Time">All Time</option>
+                <option value="Q1">Q1</option>
+                <option value="Q2">Q2</option>
+                <option value="Q3">Q3</option>
+                <option value="Q4">Q4</option>
+                <option value="H1">H1</option>
+                <option value="H2">H2</option>
+              </select>
+              <Calendar style={{ width: '14px', height: '14px', color: '#a5b4fc', position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+            </div>
+
+            {/* Quick Quarter Buttons */}
+            <div style={{ display: 'inline-flex', background: 'rgba(15, 20, 36, 0.85)', padding: '0.2rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              {['Q1', 'Q2', 'Q3', 'Q4'].map(tf => (
                 <button
                   key={tf}
-                  onClick={() => setTimeframeFilter(tf)}
+                  onClick={() => setTimeframeFilter(timeframeFilter === tf ? 'All Time' : tf)}
                   className={`tab-btn ${timeframeFilter === tf ? 'active' : ''}`}
-                  style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem' }}
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem' }}
                 >
                   {tf}
                 </button>
@@ -387,149 +382,157 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
             </div>
 
             {/* Region Dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              <MapPin style={{ width: '14px', height: '14px', color: '#38bdf8' }} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <select
                 value={regionFilter}
                 onChange={(e) => setRegionFilter(e.target.value)}
-                className="select-control"
+                className="custom-select"
+                style={{ paddingLeft: '2rem' }}
               >
                 <option value="All">All Regions</option>
                 {filterOptions.regions.map(r => (
                   <option key={r} value={r}>{r}</option>
                 ))}
               </select>
+              <Globe style={{ width: '14px', height: '14px', color: '#38bdf8', position: 'absolute', left: '10px', pointerEvents: 'none' }} />
+            </div>
+
+            {/* Headquarters / Channel Dropdown */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <select
+                value={headquartersFilter}
+                onChange={(e) => setHeadquartersFilter(e.target.value)}
+                className="custom-select"
+                style={{ paddingLeft: '2rem' }}
+              >
+                <option value="All">All Headquarters</option>
+                <option value="HQ North">HQ North</option>
+                <option value="HQ South">HQ South</option>
+                <option value="HQ East">HQ East</option>
+                <option value="HQ West">HQ West</option>
+              </select>
+              <Building2 style={{ width: '14px', height: '14px', color: '#34d399', position: 'absolute', left: '10px', pointerEvents: 'none' }} />
             </div>
 
             {/* Category Dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              <Tag style={{ width: '14px', height: '14px', color: '#c084fc' }} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="select-control"
+                className="custom-select"
+                style={{ paddingLeft: '2rem' }}
               >
                 <option value="All">All Categories</option>
                 {filterOptions.categories.map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
+              <Tag style={{ width: '14px', height: '14px', color: '#c084fc', position: 'absolute', left: '10px', pointerEvents: 'none' }} />
             </div>
           </div>
 
-          {/* Right: Active Filter Badges with clear button */}
-          {hasActiveFilters && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Active:</span>
-              {regionFilter !== 'All' && (
-                <span className="filter-chip">
-                  Region: {regionFilter}
-                  <button onClick={() => setRegionFilter('All')} className="filter-chip-remove">
-                    <X style={{ width: '12px', height: '12px' }} />
-                  </button>
-                </span>
-              )}
-              {categoryFilter !== 'All' && (
-                <span className="filter-chip">
-                  Category: {categoryFilter}
-                  <button onClick={() => setCategoryFilter('All')} className="filter-chip-remove">
-                    <X style={{ width: '12px', height: '12px' }} />
-                  </button>
-                </span>
-              )}
-              {timeframeFilter !== 'All Time' && (
-                <span className="filter-chip">
-                  Period: {timeframeFilter}
-                  <button onClick={() => setTimeframeFilter('All Time')} className="filter-chip-remove">
-                    <X style={{ width: '12px', height: '12px' }} />
-                  </button>
-                </span>
-              )}
-              <button
-                onClick={handleResetFilters}
-                className="tab-btn"
-                style={{ fontSize: '0.75rem', color: '#f43f5e', padding: '0.2rem 0.5rem' }}
-              >
-                Clear All
-              </button>
-            </div>
-          )}
+          {/* Right: Reset Filters Button */}
+          <div>
+            <button
+              onClick={handleResetFilters}
+              className="btn-secondary"
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.78rem' }}
+              title="Reset all filters to defaults"
+            >
+              <RotateCcw style={{ width: '13px', height: '13px' }} />
+              Reset
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ================= 2. INTERACTIVE KPI CARDS ================= */}
+      {/* ================= 2. PRIMARY OPERATIONAL KPIS ================= */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Primary Operational KPIs <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)' }}>(Click any card to visualize that metric across all charts)</span>
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              PRIMARY OPERATIONAL KPIS
+            </span>
+            <span style={{ fontSize: '0.75rem', color: '#818cf8', fontWeight: 500 }}>
+              (CLICK ANY CARD TO VISUALIZE THAT METRIC ACROSS ALL CHARTS)
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            <Calendar style={{ width: '14px', height: '14px' }} />
+            <span>Jan 2024 - Dec 2024</span>
+          </div>
         </div>
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           gap: '1.25rem'
         }}>
           {/* Card 1: Revenue */}
           <KpiCard
             title="Total Revenue"
-            value={kpis ? `$${kpis.total_revenue.toLocaleString()}` : '$6,109,595,430'}
+            value={kpis ? `$${kpis.total_revenue.toLocaleString()}` : '$6,886,525.68'}
             change="+14.8%"
             isPositive={true}
-            icon={DollarSign}
+            icon={BarChart2}
             color="indigo"
             isSelected={activeMetric === 'revenue'}
             onClick={() => setActiveMetric('revenue')}
             target="$6.0B"
-            progress={102}
+            progress={100}
+            showSparkline={false}
           />
 
           {/* Card 2: Net Profit */}
           <KpiCard
             title="Gross Profit"
-            value={kpis ? `$${kpis.total_profit.toLocaleString()}` : '$1,051,417,195'}
+            value={kpis ? `$${kpis.total_profit.toLocaleString()}` : '$1,186,804.84'}
             change="+12.4%"
             isPositive={true}
-            icon={TrendingUp}
+            icon={DollarSign}
             color="emerald"
             isSelected={activeMetric === 'profit'}
             onClick={() => setActiveMetric('profit')}
             target="$1.0B"
-            progress={105}
+            progress={100}
+            showSparkline={true}
           />
 
           {/* Card 3: Orders */}
           <KpiCard
             title="Total Orders"
-            value={kpis ? kpis.total_orders.toLocaleString() : '4,459,312'}
+            value={kpis ? kpis.total_orders.toLocaleString() : '5,000'}
             change="+8.2%"
             isPositive={true}
-            icon={ShoppingBag}
+            icon={ShoppingCart}
             color="cyan"
             isSelected={activeMetric === 'orders'}
             onClick={() => setActiveMetric('orders')}
-            target="4.2M"
-            progress={106}
+            target="4.5M"
+            progress={100}
+            showSparkline={true}
           />
 
-          {/* Card 4: Margin & Customers */}
+          {/* Card 4: Margin */}
           <KpiCard
             title="Profit Margin"
             value={kpis ? `${kpis.profit_margin}%` : '17.2%'}
             change="+1.8%"
             isPositive={true}
-            icon={CreditCard}
+            icon={Percent}
             color="purple"
             isSelected={activeMetric === 'margin'}
             onClick={() => setActiveMetric('margin')}
             target="16.5%"
-            progress={104}
+            progress={100}
+            showSparkline={true}
           />
         </div>
       </div>
 
-      {/* ================= 3. MAIN PERFORMANCE VISUALIZER ================= */}
-      <div className="glass-panel" style={{ padding: '1.5rem' }}>
+      {/* ================= 3. TOTAL REVENUE DYNAMIC TREND ================= */}
+      <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(12, 16, 32, 0.75)' }}>
         {/* Visualizer Controls Bar */}
         <div style={{
           display: 'flex',
@@ -540,36 +543,50 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
           marginBottom: '1.25rem'
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', margin: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                background: 'rgba(59, 130, 246, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <BarChart3 style={{ width: '16px', height: '16px', color: '#60a5fa' }} />
+              </div>
+              <h3 style={{ fontSize: '1.15rem', color: '#ffffff', margin: 0, fontWeight: 700 }}>
                 {metricConfig.label} Dynamic Trend
               </h3>
-              <span className="pill-badge" style={{ background: `${metricConfig.color}22`, color: metricConfig.color, borderColor: `${metricConfig.color}44` }}>
+              <span className="pill-badge" style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#c7d2fe', fontSize: '0.65rem' }}>
                 {activeMetric.toUpperCase()} VIEW
               </span>
             </div>
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Monthly progression for {regionFilter} • {categoryFilter} • {timeframeFilter} (Click any data point for month drilldown)
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.2rem' }}>
+              Monthly progression for All • All • All Time (Click any data point for month drilldown)
             </span>
           </div>
 
-          {/* Right Controls: Chart Type Selector & Target Toggle */}
+          {/* Right Controls: Mode Dropdown & Chart Type Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            {/* Target Line Toggle */}
-            <button
-              onClick={() => setShowTarget(!showTarget)}
-              className={`tab-btn ${showTarget ? 'active' : ''}`}
-              style={{ fontSize: '0.78rem' }}
-              title="Toggle target benchmark dashed line"
+            {/* Target Mode Dropdown */}
+            <select
+              value={targetMode}
+              onChange={(e) => setTargetMode(e.target.value)}
+              className="custom-select"
+              style={{ fontSize: '0.78rem', padding: '0.35rem 1.8rem 0.35rem 0.75rem' }}
             >
-              Benchmark Target
-            </button>
+              <option value="Revenue vs Target">Revenue vs Target</option>
+              <option value="Year over Year">Year over Year</option>
+              <option value="Cumulative Volume">Cumulative Volume</option>
+            </select>
 
             {/* Chart Type Switches */}
-            <div style={{ display: 'inline-flex', background: 'rgba(15, 20, 34, 0.8)', padding: '0.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'inline-flex', background: 'rgba(15, 20, 36, 0.85)', padding: '0.2rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
               <button
                 onClick={() => setChartType('area')}
                 className={`tab-btn ${chartType === 'area' ? 'active' : ''}`}
+                style={{ padding: '0.3rem 0.55rem' }}
                 title="Area Chart view"
               >
                 <Layers style={{ width: '14px', height: '14px' }} />
@@ -577,6 +594,7 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
               <button
                 onClick={() => setChartType('bar')}
                 className={`tab-btn ${chartType === 'bar' ? 'active' : ''}`}
+                style={{ padding: '0.3rem 0.55rem' }}
                 title="Bar Chart view"
               >
                 <BarChart3 style={{ width: '14px', height: '14px' }} />
@@ -584,200 +602,107 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
               <button
                 onClick={() => setChartType('line')}
                 className={`tab-btn ${chartType === 'line' ? 'active' : ''}`}
+                style={{ padding: '0.3rem 0.55rem' }}
                 title="Line Chart view"
               >
                 <LineIcon style={{ width: '14px', height: '14px' }} />
-              </button>
-              <button
-                onClick={() => setChartType('dual')}
-                className={`tab-btn ${chartType === 'dual' ? 'active' : ''}`}
-                title="Dual Comparison view (Revenue vs Profit)"
-              >
-                Dual
               </button>
             </div>
           </div>
         </div>
 
         {/* Main Chart Area */}
-        <div style={{ height: '320px', width: '100%' }}>
+        <div style={{ height: '300px', width: '100%' }}>
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'bar' ? (
-              <BarChart
-                data={dashboardData?.monthly || []}
-                onClick={(e) => {
-                  if (e && e.activePayload && e.activePayload.length) {
-                    setDrilldownMonth(e.activePayload[0].payload);
-                  }
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+              <BarChart data={dashboardData?.monthly || []} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <YAxis
                   stroke="#64748b"
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  tickFormatter={(v) => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}k` : v}
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(v) => v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : v}
                 />
-                <Tooltip content={<CustomTooltip />} />
-                {showTarget && <ReferenceLine y={500000000} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: 'Target', fill: '#f59e0b', fontSize: 11 }} />}
+                <Tooltip content={<CustomChartTooltip />} />
+                <ReferenceLine y={500000} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
                 <Bar
                   dataKey={metricConfig.dataKey}
-                  fill={metricConfig.color}
+                  fill="#3b82f6"
                   radius={[6, 6, 0, 0]}
                   cursor="pointer"
                 />
               </BarChart>
             ) : chartType === 'line' ? (
-              <LineChart
-                data={dashboardData?.monthly || []}
-                onClick={(e) => {
-                  if (e && e.activePayload && e.activePayload.length) {
-                    setDrilldownMonth(e.activePayload[0].payload);
-                  }
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+              <LineChart data={dashboardData?.monthly || []} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <YAxis
                   stroke="#64748b"
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  tickFormatter={(v) => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}k` : v}
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(v) => v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : v}
                 />
-                <Tooltip content={<CustomTooltip />} />
-                {showTarget && <ReferenceLine y={500000000} stroke="#f59e0b" strokeDasharray="4 4" />}
+                <Tooltip content={<CustomChartTooltip />} />
+                <ReferenceLine y={500000} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
                 <Line
-                  type="monotone"
+                  type="natural"
                   dataKey={metricConfig.dataKey}
-                  stroke={metricConfig.color}
+                  stroke="#3b82f6"
                   strokeWidth={3}
-                  dot={{ r: 5, fill: metricConfig.color, stroke: '#07090e', strokeWidth: 2 }}
-                  activeDot={{ r: 8, fill: '#fff', stroke: metricConfig.color, strokeWidth: 3 }}
+                  dot={{ r: 4, fill: '#60a5fa', stroke: '#07090e', strokeWidth: 2 }}
+                  activeDot={{ r: 7, fill: '#ffffff', stroke: '#3b82f6', strokeWidth: 3 }}
                   cursor="pointer"
                 />
               </LineChart>
-            ) : chartType === 'dual' ? (
-              <LineChart
-                data={dashboardData?.monthly || []}
-                onClick={(e) => {
-                  if (e && e.activePayload && e.activePayload.length) {
-                    setDrilldownMonth(e.activePayload[0].payload);
-                  }
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis
-                  stroke="#64748b"
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  tickFormatter={(v) => `${(v/1e6).toFixed(0)}M`}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '10px' }} />
-                <Line type="monotone" name="Revenue ($)" dataKey="revenue" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" name="Profit ($)" dataKey="profit" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
-              </LineChart>
             ) : (
-              // Default Area Chart
-              <AreaChart
-                data={dashboardData?.monthly || []}
-                onClick={(e) => {
-                  if (e && e.activePayload && e.activePayload.length) {
-                    setDrilldownMonth(e.activePayload[0].payload);
-                  }
-                }}
-              >
+              // Default Area Chart matching mockup
+              <AreaChart data={dashboardData?.monthly || []} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="primaryAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={metricConfig.color} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={metricConfig.color} stopOpacity={0.0} />
+                  <linearGradient id="splineAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <YAxis
                   stroke="#64748b"
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  tickFormatter={(v) => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}k` : v}
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(v) => v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : v}
                 />
-                <Tooltip content={<CustomTooltip />} />
-                {showTarget && <ReferenceLine y={500000000} stroke="#f59e0b" strokeDasharray="4 4" />}
+                <Tooltip content={<CustomChartTooltip />} />
+                <ReferenceLine y={500000} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
                 <Area
-                  type="monotone"
+                  type="natural"
                   dataKey={metricConfig.dataKey}
-                  stroke={metricConfig.color}
+                  stroke="#3b82f6"
                   strokeWidth={3}
                   fillOpacity={1}
-                  fill="url(#primaryAreaGrad)"
-                  dot={{ r: 4, fill: metricConfig.color, stroke: '#07090e', strokeWidth: 2 }}
-                  activeDot={{ r: 7, fill: '#fff', stroke: metricConfig.color, strokeWidth: 3 }}
+                  fill="url(#splineAreaGrad)"
+                  dot={{ r: 4, fill: '#93c5fd', stroke: '#060813', strokeWidth: 2 }}
+                  activeDot={{ r: 7, fill: '#ffffff', stroke: '#3b82f6', strokeWidth: 3 }}
                   cursor="pointer"
                 />
               </AreaChart>
             )}
           </ResponsiveContainer>
         </div>
-
-        {/* Drilldown modal notice if month clicked */}
-        {drilldownMonth && (
-          <div style={{
-            marginTop: '1rem',
-            padding: '0.85rem 1.25rem',
-            background: 'rgba(99, 102, 241, 0.1)',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span className="pill-badge" style={{ background: '#6366f1', color: '#fff' }}>
-                {drilldownMonth.month} 2025 Focus
-              </span>
-              <span style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>
-                Revenue: <strong>${Number(drilldownMonth.revenue).toLocaleString()}</strong> • 
-                Profit: <strong>${Number(drilldownMonth.profit).toLocaleString()}</strong> • 
-                Orders: <strong>{Number(drilldownMonth.orders).toLocaleString()}</strong> • 
-                Margin: <strong>{Number(drilldownMonth.margin).toFixed(1)}%</strong>
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {onNavigateToChat && (
-                <button
-                  onClick={() => onNavigateToChat(`Why did revenue reach $${Number(drilldownMonth.revenue).toLocaleString()} in ${drilldownMonth.month}? Provide a root-cause breakdown.`)}
-                  className="btn-secondary"
-                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem' }}
-                >
-                  <Sparkles style={{ width: '13px', height: '13px' }} />
-                  Deep-dive in Chat
-                </button>
-              )}
-              <button
-                onClick={() => setDrilldownMonth(null)}
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-              >
-                <X style={{ width: '16px', height: '16px' }} />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ================= 4. CROSS-FILTERING CHARTS (CATEGORY & REGION) ================= */}
+      {/* ================= 4. CATEGORY DISTRIBUTION & REGIONAL TERRITORY RANKING ================= */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
         gap: '1.5rem'
       }}>
-        {/* Category Share Donut */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+        {/* Category Distribution Donut with Legend List */}
+        <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(12, 16, 32, 0.75)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>Category Distribution</h3>
-                <span className="pill-badge" style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>Click slice to filter</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#ffffff', margin: 0, fontWeight: 700 }}>Category Distribution</h3>
+                <span className="pill-badge" style={{ fontSize: '0.62rem', padding: '0.15rem 0.45rem' }}>CLICK SLICE TO FILTER</span>
               </div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Contribution share across catalog categories</span>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Contribution share across catalog categories</span>
             </div>
 
             {categoryFilter !== 'All' && (
@@ -791,91 +716,118 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
             )}
           </div>
 
-          <div style={{ height: '240px', width: '100%', position: 'relative' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={dashboardData?.categories || []}
-                  dataKey="value"
-                  nameKey="category"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={85}
-                  innerRadius={55}
-                  paddingAngle={3}
-                  cursor="pointer"
-                  onClick={(entry) => {
-                    if (entry && entry.category) {
-                      setCategoryFilter(entry.category === categoryFilter ? 'All' : entry.category);
-                    }
-                  }}
-                  onMouseEnter={(entry) => setHoveredSlice(entry)}
-                  onMouseLeave={() => setHoveredSlice(null)}
-                >
-                  {(dashboardData?.categories || []).map((entry, index) => (
-                    <Cell
-                      key={`cat-cell-${index}`}
-                      fill={PIE_COLORS[index % PIE_COLORS.length]}
-                      stroke={categoryFilter === entry.category ? '#ffffff' : 'transparent'}
-                      strokeWidth={categoryFilter === entry.category ? 2 : 0}
-                      opacity={categoryFilter === 'All' || categoryFilter === entry.category ? 1 : 0.4}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(val, name, props) => [`$${Number(val).toLocaleString()}`, name]}
-                  contentStyle={{ background: '#0f1422', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+          {/* Donut Chart & Category Legend Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '1.25rem', alignItems: 'center' }}>
+            {/* Donut graphic */}
+            <div style={{ height: '220px', width: '220px', position: 'relative' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={dashboardData?.categories || []}
+                    dataKey="value"
+                    nameKey="category"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={85}
+                    innerRadius={55}
+                    paddingAngle={3}
+                    cursor="pointer"
+                    onClick={(entry) => {
+                      if (entry && entry.category) {
+                        setCategoryFilter(entry.category === categoryFilter ? 'All' : entry.category);
+                      }
+                    }}
+                    onMouseEnter={(entry) => setHoveredSlice(entry)}
+                    onMouseLeave={() => setHoveredSlice(null)}
+                  >
+                    {(dashboardData?.categories || []).map((entry, index) => (
+                      <Cell
+                        key={`cat-cell-${index}`}
+                        fill={PIE_COLORS[index % PIE_COLORS.length]}
+                        stroke={categoryFilter === entry.category ? '#ffffff' : 'transparent'}
+                        strokeWidth={categoryFilter === entry.category ? 2 : 0}
+                        opacity={categoryFilter === 'All' || categoryFilter === entry.category ? 1 : 0.45}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(val, name) => [`$${Number(val).toLocaleString()}`, name]}
+                    contentStyle={{ background: '#0f1422', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
 
-            {/* Central Donut Readout */}
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-              pointerEvents: 'none'
-            }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
-                {hoveredSlice ? hoveredSlice.category : (categoryFilter !== 'All' ? categoryFilter : 'Total Categories')}
-              </span>
-              <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                {hoveredSlice ? `$${(hoveredSlice.value / 1e6).toFixed(1)}M` : `${dashboardData?.categories?.length || 0} active`}
-              </span>
+              {/* Central Donut Readout */}
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
+                pointerEvents: 'none'
+              }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
+                  Total Categories
+                </span>
+                <span style={{ fontSize: '1rem', fontWeight: 800, color: '#ffffff' }}>
+                  {dashboardData?.categories?.length || 13} active
+                </span>
+              </div>
+            </div>
+
+            {/* Category Percentages Legend List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '220px', overflowY: 'auto' }}>
+              {categoryPercentages.slice(0, 8).map((c, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => setCategoryFilter(categoryFilter === c.category ? 'All' : c.category)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.35rem 0.6rem',
+                    borderRadius: '6px',
+                    background: categoryFilter === c.category ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    cursor: 'pointer',
+                    fontSize: '0.82rem',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: c.color }} />
+                    <span style={{ color: '#cbd5e1', fontWeight: 500 }}>{c.category}</span>
+                  </div>
+                  <span style={{ fontWeight: 600, color: '#f8fafc' }}>{c.percentage}%</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Regional Performance Ranking */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+        {/* Regional Territory Ranking (Horizontal Bar Chart) */}
+        <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(12, 16, 32, 0.75)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>Regional Territory Ranking</h3>
-                <span className="pill-badge" style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>Click bar to filter</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#ffffff', margin: 0, fontWeight: 700 }}>Regional Territory Ranking</h3>
+                <span className="pill-badge" style={{ fontSize: '0.62rem', padding: '0.15rem 0.45rem' }}>CLICK BAR TO FILTER</span>
               </div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Revenue volume per geographic zone</span>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Revenue volume per geographic zone</span>
             </div>
 
-            {regionFilter !== 'All' && (
-              <button
-                onClick={() => setRegionFilter('All')}
-                className="filter-chip"
-                style={{ fontSize: '0.75rem' }}
-              >
-                Reset ({regionFilter}) <X style={{ width: '12px', height: '12px' }} />
-              </button>
-            )}
+            <select className="custom-select" style={{ fontSize: '0.78rem', padding: '0.3rem 1.6rem 0.3rem 0.65rem' }}>
+              <option value="Revenue">Revenue</option>
+              <option value="Profit">Profit</option>
+              <option value="Orders">Orders</option>
+            </select>
           </div>
 
-          <div style={{ height: '240px', width: '100%' }}>
+          <div style={{ height: '220px', width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={dashboardData?.regions || []}
+                data={regionalData}
                 layout="vertical"
-                margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                margin={{ top: 5, right: 40, left: 10, bottom: 5 }}
                 onClick={(e) => {
                   if (e && e.activePayload && e.activePayload.length) {
                     const reg = e.activePayload[0].payload.region;
@@ -883,17 +835,18 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
                   }
                 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                 <XAxis
                   type="number"
                   stroke="#64748b"
-                  tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`}
+                  tick={{ fill: '#94a3b8', fontSize: 10 }}
+                  tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`}
                 />
                 <YAxis
                   type="category"
                   dataKey="region"
                   stroke="#64748b"
-                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tick={{ fill: '#cbd5e1', fontSize: 11 }}
                   width={65}
                 />
                 <Tooltip
@@ -906,13 +859,20 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
                   radius={[0, 4, 4, 0]}
                   cursor="pointer"
                 >
-                  {(dashboardData?.regions || []).map((entry, index) => (
+                  {regionalData.map((entry, index) => (
                     <Cell
-                      key={`reg-cell-${index}`}
-                      fill={regionFilter === entry.region ? '#38bdf8' : '#0891b2'}
-                      opacity={regionFilter === 'All' || regionFilter === entry.region ? 1 : 0.4}
+                      key={`reg-bar-${index}`}
+                      fill={regionFilter === entry.region ? '#38bdf8' : '#0284c7'}
+                      opacity={regionFilter === 'All' || regionFilter === entry.region ? 1 : 0.45}
                     />
                   ))}
+                  <LabelList
+                    dataKey="revenue"
+                    position="right"
+                    formatter={(v) => `${(v / 1e6).toFixed(2)}M`}
+                    fill="#94a3b8"
+                    fontSize={10}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -920,220 +880,234 @@ export default function DashboardView({ onNavigateToChat, onNavigateToRootCause 
         </div>
       </div>
 
-      {/* ================= 5. INTERACTIVE TOP PRODUCTS LEADERBOARD ================= */}
-      <div className="glass-panel" style={{ padding: '1.5rem' }}>
-        {/* Leaderboard Header with Search & Options */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '1rem',
-          marginBottom: '1.25rem'
-        }}>
-          <div>
-            <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', margin: 0 }}>
-              Top Products Performance Leaderboard
-            </h3>
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Interactive catalog ranking • Click column headers to sort • Click 'Ask AI' for instant product analysis
-            </span>
+      {/* ================= 5. TOP PRODUCTS LEADERBOARD & AUTOMATED AI EXECUTIVE SUMMARY ================= */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+        gap: '1.5rem'
+      }}>
+        {/* Left: Top Products Performance Leaderboard */}
+        <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(12, 16, 32, 0.75)' }}>
+          {/* Header Controls */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            marginBottom: '1rem'
+          }}>
+            <div>
+              <h3 style={{ fontSize: '1.1rem', color: '#ffffff', margin: 0, fontWeight: 700 }}>
+                Top Products Performance Leaderboard
+              </h3>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Interactive catalog ranking • Click column headers to sort • Click 'Ask AI' for instant product analysis
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {/* Search Box */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <Search style={{ width: '13px', height: '13px', color: 'var(--text-muted)', position: 'absolute', left: '8px' }} />
+                <input
+                  type="text"
+                  placeholder="Search products or categories..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    background: 'rgba(15, 20, 36, 0.9)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: '#f8fafc',
+                    padding: '0.35rem 0.75rem 0.35rem 1.8rem',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontFamily: 'var(--font-sans)',
+                    outline: 'none',
+                    minWidth: '180px'
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    style={{ position: 'absolute', right: '6px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    <X style={{ width: '12px', height: '12px' }} />
+                  </button>
+                )}
+              </div>
+
+              {/* Rows Dropdown */}
+              <select
+                value={rowsPerPage}
+                onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                className="custom-select"
+                style={{ fontSize: '0.78rem', padding: '0.35rem 1.6rem 0.35rem 0.65rem' }}
+              >
+                <option value={5}>5 Rows</option>
+                <option value={8}>8 Rows</option>
+                <option value={10}>10 Rows</option>
+              </select>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {/* Search Input */}
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Search style={{ width: '15px', height: '15px', color: 'var(--text-muted)', position: 'absolute', left: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search products or categories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  background: 'rgba(15, 20, 34, 0.8)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)',
-                  padding: '0.45rem 0.85rem 0.45rem 2rem',
-                  borderRadius: '8px',
-                  fontSize: '0.85rem',
-                  fontFamily: 'var(--font-sans)',
-                  outline: 'none',
-                  minWidth: '220px'
-                }}
-              />
-              {searchQuery && (
+          {/* Table matching mockup */}
+          <div style={{ overflowX: 'auto' }}>
+            <table className="interactive-table">
+              <thead>
+                <tr>
+                  <th className="sortable" onClick={() => handleSort('id')}>
+                    ID {sortKey === 'id' ? (sortAsc ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="sortable" onClick={() => handleSort('name')}>
+                    Product Name {sortKey === 'name' ? (sortAsc ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="sortable" onClick={() => handleSort('category')}>
+                    Category {sortKey === 'category' ? (sortAsc ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="sortable" onClick={() => handleSort('revenue')} style={{ textAlign: 'right' }}>
+                    Revenue ($) {sortKey === 'revenue' ? (sortAsc ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="sortable" onClick={() => handleSort('profit')} style={{ textAlign: 'right' }}>
+                    Profit ($) {sortKey === 'profit' ? (sortAsc ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="sortable" onClick={() => handleSort('units_sold')} style={{ textAlign: 'right' }}>
+                    Units {sortKey === 'units_sold' ? (sortAsc ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="sortable" onClick={() => handleSort('margin')} style={{ textAlign: 'right' }}>
+                    Margin {sortKey === 'margin' ? (sortAsc ? '▲' : '▼') : ''}
+                  </th>
+                  <th style={{ textAlign: 'center' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedProducts.slice(0, rowsPerPage).map((p, idx) => (
+                  <tr key={p.id || idx}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600 }}>
+                      {p.id}
+                    </td>
+                    <td style={{ fontWeight: 600, color: '#ffffff' }}>
+                      {p.name}
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: '6px',
+                        fontSize: '0.72rem',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        color: '#cbd5e1'
+                      }}>
+                        {p.category}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, color: '#f8fafc' }}>
+                      ${Number(p.revenue).toLocaleString()}
+                    </td>
+                    <td style={{ textAlign: 'right', color: '#34d399', fontWeight: 600 }}>
+                      ${Number(p.profit).toLocaleString()}
+                    </td>
+                    <td style={{ textAlign: 'right', color: '#cbd5e1' }}>
+                      {Number(p.units_sold).toLocaleString()}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span style={{
+                        color: p.margin >= 17 ? '#34d399' : p.margin >= 15 ? '#38bdf8' : '#fbbf24',
+                        fontWeight: 600
+                      }}>
+                        {p.margin}%
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {onNavigateToChat && (
+                        <button
+                          onClick={() => onNavigateToChat(`Provide a commercial performance breakdown and sales trend for ${p.name} (${p.id}) in ${p.category}.`)}
+                          className="btn-secondary"
+                          style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', gap: '0.25rem', borderRadius: '6px' }}
+                          title="Query AI Copilot on this product"
+                        >
+                          <Sparkles style={{ width: '11px', height: '11px', color: '#c084fc' }} />
+                          Ask AI
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right: Automated AI Executive Summary */}
+        <div className="glass-panel" style={{
+          padding: '1.5rem',
+          background: 'linear-gradient(135deg, rgba(20, 26, 54, 0.85) 0%, rgba(18, 22, 48, 0.75) 100%)',
+          borderColor: 'rgba(99, 102, 241, 0.25)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between'
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#c084fc' }}>
+                <Sparkles style={{ width: '16px', height: '16px' }} />
+                <h3 style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>
+                  Automated AI Executive Summary
+                </h3>
+              </div>
+
+              {onNavigateToRootCause && (
                 <button
-                  onClick={() => setSearchQuery('')}
-                  style={{ position: 'absolute', right: '8px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  onClick={onNavigateToRootCause}
+                  className="btn-secondary"
+                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', borderColor: 'rgba(139, 92, 246, 0.4)' }}
                 >
-                  <X style={{ width: '14px', height: '14px' }} />
+                  Launch Root Cause Analysis
+                  <ArrowRight style={{ width: '13px', height: '13px' }} />
                 </button>
               )}
             </div>
 
-            {/* Rows per page */}
-            <select
-              value={rowsPerPage}
-              onChange={(e) => setRowsPerPage(Number(e.target.value))}
-              className="select-control"
-              style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
-            >
-              <option value={5}>5 Rows</option>
-              <option value={8}>8 Rows</option>
-              <option value={10}>10 Rows</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Products Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table className="interactive-table">
-            <thead>
-              <tr>
-                <th className="sortable" onClick={() => handleSort('id')}>
-                  ID {sortKey === 'id' ? (sortAsc ? '▲' : '▼') : ''}
-                </th>
-                <th className="sortable" onClick={() => handleSort('name')}>
-                  Product Name {sortKey === 'name' ? (sortAsc ? '▲' : '▼') : ''}
-                </th>
-                <th className="sortable" onClick={() => handleSort('category')}>
-                  Category {sortKey === 'category' ? (sortAsc ? '▲' : '▼') : ''}
-                </th>
-                <th className="sortable" onClick={() => handleSort('revenue')} style={{ textAlign: 'right' }}>
-                  Revenue ($) {sortKey === 'revenue' ? (sortAsc ? '▲' : '▼') : ''}
-                </th>
-                <th className="sortable" onClick={() => handleSort('profit')} style={{ textAlign: 'right' }}>
-                  Profit ($) {sortKey === 'profit' ? (sortAsc ? '▲' : '▼') : ''}
-                </th>
-                <th className="sortable" onClick={() => handleSort('units_sold')} style={{ textAlign: 'right' }}>
-                  Units {sortKey === 'units_sold' ? (sortAsc ? '▲' : '▼') : ''}
-                </th>
-                <th className="sortable" onClick={() => handleSort('margin')} style={{ textAlign: 'right' }}>
-                  Margin (%) {sortKey === 'margin' ? (sortAsc ? '▲' : '▼') : ''}
-                </th>
-                <th style={{ textAlign: 'center' }}>AI Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedProducts.slice(0, rowsPerPage).map((p, idx) => (
-                <tr key={p.id || idx}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--accent-indigo)' }}>
-                    {p.id}
-                  </td>
-                  <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {p.name}
-                  </td>
-                  <td>
-                    <span style={{
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '6px',
-                      fontSize: '0.75rem',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      color: '#cbd5e1'
-                    }}>
-                      {p.category}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: '#f8fafc' }}>
-                    ${Number(p.revenue).toLocaleString()}
-                  </td>
-                  <td style={{ textAlign: 'right', color: '#34d399', fontWeight: 500 }}>
-                    ${Number(p.profit).toLocaleString()}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    {Number(p.units_sold).toLocaleString()}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span style={{
-                      color: p.margin >= 18 ? '#34d399' : p.margin >= 15 ? '#38bdf8' : '#fbbf24',
-                      fontWeight: 600
-                    }}>
-                      {p.margin}%
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    {onNavigateToChat && (
-                      <button
-                        onClick={() => onNavigateToChat(`Provide a commercial performance breakdown and sales trend for ${p.name} (${p.id}) in ${p.category}.`)}
-                        className="btn-secondary"
-                        style={{ fontSize: '0.72rem', padding: '0.25rem 0.55rem', gap: '0.25rem' }}
-                        title="Query AI Copilot on this product"
-                      >
-                        <Sparkles style={{ width: '12px', height: '12px', color: '#c084fc' }} />
-                        Ask AI
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ================= 6. AUTOMATED EXECUTIVE COPILOT SUMMARY ================= */}
-      <div className="glass-panel" style={{
-        padding: '1.5rem',
-        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(99, 102, 241, 0.06) 100%)',
-        borderColor: 'rgba(139, 92, 246, 0.3)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#c084fc' }}>
-            <Sparkles style={{ width: '18px', height: '18px' }} />
-            <h3 style={{ fontSize: '1.15rem', margin: 0 }}>
-              Automated AI Executive Summary
-            </h3>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {onNavigateToRootCause && (
-              <button
-                onClick={onNavigateToRootCause}
-                className="btn-secondary"
-                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', borderColor: 'rgba(139, 92, 246, 0.4)' }}
-              >
-                Launch Root Cause Analysis
-                <ArrowRight style={{ width: '14px', height: '14px' }} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        <p style={{ fontSize: '0.94rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '1rem' }}>
-          {dashboardData?.ai_summary?.body ||
-            'Overall business activity shows solid revenue growth peaking in Q2. High-value customer accounts and strategic discount caps have maintained healthy gross profit margins across regional territories.'}
-        </p>
-
-        <div style={{
-          padding: '1rem',
-          background: 'rgba(255, 255, 255, 0.04)',
-          borderRadius: '12px',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.75rem'
-        }}>
-          <div>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-indigo)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Strategic Recommendation
-            </span>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', marginTop: '0.2rem', margin: 0 }}>
-              {dashboardData?.ai_summary?.recommendation ||
-                'Capitalize on high-margin catalog items by expanding stock allocation in top-performing regional territories.'}
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+              {dashboardData?.ai_summary?.body ||
+                'Revenue reached $6,886,525.68 with a healthy gross profit of $1,186,804.84 (17.2% margin). Leading segment growth is anchored by Category 7 in the Region 7 territory across 5,000 transactions.'}
             </p>
           </div>
 
-          {onNavigateToChat && (
-            <button
-              onClick={() => onNavigateToChat('What actions can improve our gross profit margin across underperforming regions?')}
-              className="btn-primary"
-              style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem' }}
-            >
-              Discuss with Copilot
-            </button>
-          )}
+          {/* Strategic Recommendation Box */}
+          <div style={{
+            padding: '0.95rem 1.15rem',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem'
+          }}>
+            <div style={{ flex: 1, minWidth: '220px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.2rem' }}>
+                <span style={{ fontSize: '0.75rem' }}>💡</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  STRATEGIC RECOMMENDATION
+                </span>
+              </div>
+              <p style={{ fontSize: '0.82rem', color: '#ffffff', margin: 0, lineHeight: 1.4 }}>
+                {dashboardData?.ai_summary?.recommendation ||
+                  'Expand promotional inventory for Category 7 while introducing targeted pricing campaigns in secondary zones to maximize net margins.'}
+              </p>
+            </div>
+
+            {onNavigateToChat && (
+              <button
+                onClick={() => onNavigateToChat('What actions can improve our gross profit margin across underperforming regions?')}
+                className="btn-primary"
+                style={{ fontSize: '0.78rem', padding: '0.45rem 0.85rem' }}
+              >
+                Discuss with Copilot →
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
